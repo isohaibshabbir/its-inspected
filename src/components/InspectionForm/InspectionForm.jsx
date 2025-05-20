@@ -27,11 +27,43 @@ import {
     TextArea,
     SelectContainer,
 } from "./Components";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "../../firebaseConfig";
 
 export default function MultiStepForm() {
     const [step, setStep] = useState(0);
     const { control, handleSubmit, register, watch, trigger, formState: { errors }, } = useForm();
-    const onSubmit = (data) => console.log("Form Data:", data);
+
+    const uploadImagesToFirebase = async (images) => {
+        const uploadedUrls = [];
+        for (const image of images) {
+            if (image.file) {
+                const storageRef = ref(storage, `images/${image.file.name}`);
+                await uploadBytes(storageRef, image.file).then((snapshot) => {
+                    console.log('Uploaded a blob or file!', snapshot);
+                }); // Pass the file object directly
+                const downloadUrl = await getDownloadURL(storageRef);
+                uploadedUrls.push(downloadUrl);
+            } else {
+                console.error("Invalid image object:", image);
+            }
+        }
+
+        return uploadedUrls;
+    };
+
+    const onSubmit = async (data) => {
+        const formData = { ...data };
+
+        // Upload images to Firebase
+        for (const key in formData) {
+            if (Array.isArray(formData[key])) {
+                formData[key] = await uploadImagesToFirebase(formData[key]);
+            }
+        }
+
+        console.log("Form Data with Uploaded URLs:", formData);
+    };
 
     const handleNext = async () => {
         const valid = await trigger();

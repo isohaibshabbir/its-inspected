@@ -1,4 +1,3 @@
-
 import styled from "styled-components";
 import { steps } from "./config";
 export const FormContainer = styled.div`
@@ -233,7 +232,10 @@ export const PhoneNumberInput = styled(Input)`
 export const ImageUpload = ({ singleIamge = false, value = [], onChange, name }) => {
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
-    const newImages = files.map((file) => URL.createObjectURL(file));
+    const newImages = files.map((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }));
     onChange(singleIamge ? [...newImages] : [...value, ...newImages]);
   };
 
@@ -241,7 +243,8 @@ export const ImageUpload = ({ singleIamge = false, value = [], onChange, name })
     const updatedImages = value.filter((_, i) => i !== index);
     onChange(updatedImages);
   };
-  const id = `image-upload-${name}`
+
+  const id = `image-upload-${name}`;
 
   return (
     <ImageUploadContainer>
@@ -253,13 +256,13 @@ export const ImageUpload = ({ singleIamge = false, value = [], onChange, name })
         onChange={handleImageUpload}
         id={id}
       />
-      <label htmlFor={id} style={{
-        "cursor": "pointer"
-      }}>{`Click to upload image${!singleIamge ? 's' : ''}`}</label>
+      <label htmlFor={id} style={{ cursor: "pointer" }}>
+        {`Click to upload image${!singleIamge ? "s" : ""}`}
+      </label>
       <PreviewContainer>
-        {value.map((src, index) => (
+        {value.map((image, index) => (
           <PreviewImage key={index}>
-            <PreviewImg src={src} alt={`Preview ${index}`} width="100" />
+            <PreviewImg src={image.preview} alt={`Preview ${index}`} width="100" />
             <RemoveButton type="button" onClick={() => handleRemoveImage(index)}>x</RemoveButton>
           </PreviewImage>
         ))}
