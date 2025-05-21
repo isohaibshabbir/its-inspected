@@ -64,6 +64,9 @@ export default function MultiStepForm() {
             // Move to the next step immediately
             setStep(step + 1);
 
+            // Scroll to the top of the page
+            window.scrollTo({ top: 0, behavior: "smooth" });
+
             // Start uploading images in the background
             for (const field of imageFields) {
                 const fieldName = field.name;
@@ -130,9 +133,20 @@ export default function MultiStepForm() {
 
     const watchFields = watch();
 
+    const handleStepChange = async (targetStep) => {
+        if (targetStep > step) {
+            const valid = await trigger();
+            if (!valid) {
+                console.error("Validation failed. Cannot move to the next step.");
+                return;
+            }
+        }
+        setStep(targetStep);
+    };
+
     return (
         <FormContainer>
-            <Indicator currentStep={step} setStep={setStep} />
+            <Indicator currentStep={step} setStep={handleStepChange} />
             <form onSubmit={handleSubmit(onSubmit)}>
                 {formConfig[step].sections.map((section) => (
                     <div key={section.title}>

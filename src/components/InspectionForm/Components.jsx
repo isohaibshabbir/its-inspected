@@ -304,17 +304,21 @@ export const YearSelect = ({ value, onChange }) => {
 };
 
 export const Indicator = ({ currentStep, setStep }) => {
-  return (
-    <IndicatorContainer>
-      {steps.map((_, index) => {
-        const state =
-          index === currentStep ? "current" : index < currentStep ? "past" : "next";
-        return (
-          <IndicatorStep key={index} state={state} onClick={() => setStep(index)}>
-            {index + 1}
-          </IndicatorStep>
-        );
-      })}
-    </IndicatorContainer>
-  );
+    return (
+        <IndicatorContainer>
+            {steps.map((_, index) => {
+                const state =
+                    index === currentStep ? "current" : index < currentStep ? "past" : "next";
+                return (
+                    <IndicatorStep
+                        key={index}
+                        state={state}
+                        onClick={() => setStep(index)} // Use the updated step handler
+                    >
+                        {index + 1}
+                    </IndicatorStep>
+                );
+            })}
+        </IndicatorContainer>
+    );
 };
