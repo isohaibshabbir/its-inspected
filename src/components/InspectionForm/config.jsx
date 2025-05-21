@@ -13,10 +13,9 @@ export const formConfig = [
                 ]
             },
             {
-                // title: "Thumnail Image",
                 fields: [
                     { label: "Thumnail Image:", name: "thumbnailImages", type: "image-upload", singleIamge: true, colSpan: 2, required: true },
-                    { label: "Car Images:", name: "carImages", type: "image-upload", colSpan: 2 }
+                    { label: "Car Images:", name: "carImagesMain", type: "image-upload", colSpan: 2 }
                 ]
             },
             {
@@ -479,12 +478,6 @@ export const formConfig = [
                             "Other"
                         ], colSpan: 1
                     },
-                    {
-                        label: "Car", name: "car", type: "select", options: [
-
-                        ], colSpan: 1
-                    },
-                    { label: "Car - Photo", name: "carImages", type: "image-upload", colSpan: 1 },
 
                 ]
             },
@@ -764,14 +757,6 @@ export const formConfig = [
                         ], colSpan: 1
                     },
                     { label: "Parking Sensors - Photo", name: "parkingSensorsImages", type: "image-upload", colSpan: 1 },
-                    {
-                        label: "Car", name: "car", type: "radio", options: [
-                            "Pass",
-                            "N/A",
-                            "Other",
-                        ], colSpan: 1
-                    },
-                    { label: "Car - Photo", name: "carImages", type: "image-upload", colSpan: 1 },
                 ]
             },
         ]

@@ -1,3 +1,4 @@
+import React, { forwardRef } from "react";
 import styled from "styled-components";
 import { steps } from "./config";
 export const FormContainer = styled.div`
@@ -36,7 +37,6 @@ export const Input = styled.input`
   border-radius: 4px;
   ${({ required }) => required && "border-left: 3px solid black;"}
 `;
-
 
 export const SelectContainer = styled.div`
   display: flex;
@@ -95,6 +95,7 @@ export const IndicatorStep = styled.div`
 export const OtherInput = styled(Input)`
   margin-left: 25px;
   margin-top: 5px;
+  width: 85%;
 `;
 
 export const RadioContainer = styled.div`
@@ -220,7 +221,6 @@ export const TextArea = styled.textarea`
   resize: vertical;
 `;
 
-
 export const CountryCodeInput = styled(Input)`
   flex: 1;
 `;
@@ -229,7 +229,7 @@ export const PhoneNumberInput = styled(Input)`
   flex: 3;
 `;
 
-export const ImageUpload = ({ singleIamge = false, value = [], onChange, name }) => {
+export const ImageUpload = forwardRef(({ singleIamge = false, value = [], onChange, name }, ref) => {
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     const newImages = files.map((file) => ({
@@ -255,6 +255,7 @@ export const ImageUpload = ({ singleIamge = false, value = [], onChange, name })
         style={{ display: "none" }}
         onChange={handleImageUpload}
         id={id}
+        ref={ref} // Attach the ref here
       />
       <label htmlFor={id} style={{ cursor: "pointer" }}>
         {`Click to upload image${!singleIamge ? "s" : ""}`}
@@ -269,8 +270,7 @@ export const ImageUpload = ({ singleIamge = false, value = [], onChange, name })
       </PreviewContainer>
     </ImageUploadContainer>
   );
-};
-
+});
 
 export const BatteryCondition = ({ value, onChange }) => {
   return (
@@ -303,7 +303,6 @@ export const YearSelect = ({ value, onChange }) => {
   );
 };
 
-
 export const Indicator = ({ currentStep, setStep }) => {
   return (
     <IndicatorContainer>
@@ -318,4 +317,4 @@ export const Indicator = ({ currentStep, setStep }) => {
       })}
     </IndicatorContainer>
   );
-}
+};

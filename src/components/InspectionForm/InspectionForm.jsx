@@ -28,47 +28,106 @@ import {
     SelectContainer,
 } from "./Components";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "../../firebaseConfig";
+import { storage, db } from "../../firebaseConfig";
+import { addDoc, collection } from "firebase/firestore";
+import { calculateStepScores } from "./utils";
 
 export default function MultiStepForm() {
     const [step, setStep] = useState(0);
-    const { control, handleSubmit, register, watch, trigger, formState: { errors }, } = useForm();
+    const [uploadedImages, setUploadedImages] = useState({}); // Store uploaded image URLs separately
+    const { control, handleSubmit, register, watch, trigger, formState: { errors }, setValue } = useForm();
 
     const uploadImagesToFirebase = async (images) => {
         const uploadedUrls = [];
         for (const image of images) {
             if (image.file) {
-                const storageRef = ref(storage, `images/${image.file.name}`);
+                const timestamp = new Date().toISOString(); // Add a unique timestamp
+                const storageRef = ref(storage, `images/${timestamp}_${image.file.name}`);
                 await uploadBytes(storageRef, image.file).then((snapshot) => {
                     console.log('Uploaded a blob or file!', snapshot);
-                }); // Pass the file object directly
+                });
                 const downloadUrl = await getDownloadURL(storageRef);
                 uploadedUrls.push(downloadUrl);
             } else {
                 console.error("Invalid image object:", image);
             }
         }
-
         return uploadedUrls;
-    };
-
-    const onSubmit = async (data) => {
-        const formData = { ...data };
-
-        // Upload images to Firebase
-        for (const key in formData) {
-            if (Array.isArray(formData[key])) {
-                formData[key] = await uploadImagesToFirebase(formData[key]);
-            }
-        }
-
-        console.log("Form Data with Uploaded URLs:", formData);
     };
 
     const handleNext = async () => {
         const valid = await trigger();
-        if (valid) setStep(step + 1);
+        if (valid) {
+            const currentStepFields = formConfig[step].sections.flatMap(section => section.fields);
+            const imageFields = currentStepFields.filter(field => field.type === "image-upload");
+
+            // Move to the next step immediately
+            setStep(step + 1);
+
+            // Start uploading images in the background
+            for (const field of imageFields) {
+                const fieldName = field.name;
+
+                // Skip upload if images for this field already exist in uploadedImages
+                if (uploadedImages[fieldName]) {
+                    console.log(`Images for ${fieldName} already uploaded. Skipping upload."`);
+                    continue;
+                }
+
+                const images = watchFields[fieldName];
+                if (Array.isArray(images)) {
+                    uploadImagesToFirebase(images).then((uploadedUrls) => {
+                        setUploadedImages(prev => ({ ...prev, [fieldName]: uploadedUrls })); // Store URLs separately
+                    }).catch((error) => {
+                        console.error(`Error uploading images for ${fieldName}:`, error);
+                    });
+                }
+            }
+        }
     };
+    const sanitizeData = (data) => {
+        const sanitizedData = {};
+        for (const key in data) {
+            if (data[key] !== undefined) {
+                sanitizedData[key] = data[key];
+            }
+        }
+        return sanitizedData;
+    };
+
+    const onSubmit = async (data) => {
+
+        try {
+            // Merge uploaded image URLs into the main form data
+            const finalData = { ...data, ...uploadedImages };
+            console.log("Final Form Data with Uploaded URLs:", finalData);
+            const scores = calculateStepScores(finalData)
+            console.log("Final Form Data with Uploaded URLs:", scores);
+
+            // Sanitize the data to remove undefined values
+            const sanitizedData = sanitizeData(finalData);
+
+            const averages = {
+                engine: scores[1].average,
+                transmission: scores[2].average,
+                underbody: scores[3].average,
+                electic: scores[4].average,
+                interior: scores[5].average
+            };
+
+            const dataAndAverages = { ...sanitizedData, averages };
+            // Push data to Firestore
+            const docRef = await addDoc(collection(db, "inspections"), dataAndAverages);
+            console.log("Document written with ID: ", docRef.id);
+
+            // Optionally, navigate to a success page or show a success message
+            // alert("Form submitted successfully!");
+        } catch (error) {
+            console.error("Error adding document: ", error);
+            // alert("Failed to submit the form. Please try again.");
+        }
+    };
+
     const watchFields = watch();
 
     return (
@@ -85,84 +144,144 @@ export default function MultiStepForm() {
                                     <Controller
                                         name={fieldConfig.name}
                                         control={control}
+                                        defaultValue={
+                                            fieldConfig.type === "radio" ? "Pass" : // Default radios to "Pass"
+                                                undefined
+                                        }
                                         rules={{ required: fieldConfig.required }}
                                         render={({ field }) => (
                                             <>
-                                                {fieldConfig.type === "radio" ? (
-                                                    <RadioContainer>
-                                                        {fieldConfig.options?.map(option => (
-                                                            <RadioLabel key={option}>
-                                                                <RadioInput type="radio" {...field} value={option} required={fieldConfig.required} /> {option}
-                                                            </RadioLabel>
-                                                        ))}
-                                                        {watchFields[fieldConfig.name] === "Other" && (
-                                                            <>
-                                                                <OtherInput type="text" placeholder="Please specify" {...register(`${fieldConfig.name}_other`)} />
-
-                                                                <input type="range" min="0" max="10" step="1" {...register(`${fieldConfig.name}_score`)} />
-                                                            </>
-                                                        )}
-                                                    </RadioContainer>
-                                                ) : fieldConfig.type === "select" ? (
-                                                    <SelectContainer>
-                                                        <Select {...field} required={fieldConfig.required}>
-                                                            {fieldConfig.options?.map(option => (<option key={option} value={option}>{option}</option>))}
-                                                        </Select>
-
-                                                        {watchFields[fieldConfig.name] === "Other" && (
-                                                            <>
-                                                                <input type="range" min="0" max="10" step="1" defaultValue={0} {...register(`${fieldConfig.name}_score`)} />
-                                                            </>
-                                                        )}
-                                                    </SelectContainer>
-                                                ) : fieldConfig.type === "battery" ? (
-                                                    <BatteryCondition value={field.value || 0} onChange={field.onChange} />
-                                                ) : fieldConfig.type === "image-upload" ? (
-                                                    <ImageUpload {...field} singleIamge={fieldConfig.singleIamge} name={fieldConfig.name} />
-                                                ) : fieldConfig.type === "checkbox" ? (
-                                                    <CheckboxGroup>
-                                                        {fieldConfig.options?.map((option) => (
-                                                            <CheckboxLabel key={option}>
-                                                                <CheckboxInput
-                                                                    type="checkbox"
-                                                                    value={option}
-                                                                    checked={field.value?.includes(option)}
-                                                                    onChange={(e) => {
-                                                                        const value = e.target.value;
-                                                                        const newValue = field.value?.includes(value)
-                                                                            ? field.value.filter((item) => item !== value)
-                                                                            : [...(field.value || []), value];
-                                                                        field.onChange(newValue);
-                                                                    }}
-                                                                />
-                                                                {option}
-                                                            </CheckboxLabel>
-                                                        ))}
-                                                    </CheckboxGroup>
-                                                ) : fieldConfig.type === "phone" ? (
-                                                    <PhoneNumberContainer>
-                                                        <CountryCodeInput
-                                                            placeholder="+61"
-                                                            type="text"
-                                                            maxLength="4"
-                                                            onChange={(e) => field.onChange({ ...field.value, countryCode: e.target.value })}
-                                                            required={fieldConfig.required}
-                                                        />
-                                                        <PhoneNumberInput
-                                                            placeholder="Phone Number"
-                                                            type="text"
-                                                            onChange={(e) => field.onChange({ ...field.value, phoneNumber: e.target.value })}
-                                                            required={fieldConfig.required}
-                                                        />
-                                                    </PhoneNumberContainer>
-                                                ) : fieldConfig.type === "year" ? (
-                                                    <YearSelect value={field.value} onChange={(e) => field.onChange(e.target.value)} />
-                                                ) : fieldConfig.type === "textarea" ? (
-                                                    <TextArea {...field} />
+                                                {fieldConfig.type === "image-upload" ? (
+                                                    <ImageUpload
+                                                        {...field}
+                                                        singleIamge={fieldConfig.singleIamge}
+                                                        name={fieldConfig.name}
+                                                    />
                                                 ) : (
-                                                    <Input type={fieldConfig.type} {...field} required={fieldConfig.required} />
+                                                    <>
+                                                        {fieldConfig.type === "radio" ? (
+                                                            <RadioContainer>
+                                                                {fieldConfig.options?.map((option, index) => (
+                                                                    <RadioLabel key={`${fieldConfig.name}-${index}`}> {/* Add unique key */}
+                                                                        <RadioInput
+                                                                            type="radio"
+                                                                            {...field}
+                                                                            value={option}
+                                                                            checked={field.value === option} // Ensure the radio button reflects the current value
+                                                                            required={fieldConfig.required}
+                                                                        /> {option}
+                                                                    </RadioLabel>
+                                                                ))}
+                                                                {watchFields[fieldConfig.name] === "Other" && (
+                                                                    <>
+                                                                        <OtherInput
+                                                                            type="text"
+                                                                            placeholder="Please specify"
+                                                                            {...register(`${fieldConfig.name}_other`)}
+                                                                            value={watchFields[`${fieldConfig.name}_other`] || ""}
+                                                                        />
+                                                                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px" }}>
+                                                                            <span>0</span> {/* Label for the start of the slider */}
+                                                                            <input
+                                                                                type="range"
+                                                                                min="0"
+                                                                                max="10"
+                                                                                step="1"
+                                                                                {...register(`${fieldConfig.name}_score`)}
+                                                                                value={watchFields[`${fieldConfig.name}_score`] || 5} // Default slider to 5
+                                                                            />
+                                                                            <span>10</span> {/* Label for the end of the slider */}
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                            </RadioContainer>
+                                                        ) : fieldConfig.type === "select" ? (
+                                                            <SelectContainer>
+                                                                <Select {...field} required={fieldConfig.required}>
+                                                                    {fieldConfig.options?.map((option, index) => (
+                                                                        <option key={`${fieldConfig.name}-${index}`} value={option}> {/* Add unique key */}
+                                                                            {option}
+                                                                        </option>
+                                                                    ))}
+                                                                </Select>
+
+                                                                {watchFields[fieldConfig.name] === "Other" && (
+                                                                    <>
+                                                                        <OtherInput
+                                                                            type="text"
+                                                                            placeholder="Please specify"
+                                                                            {...register(`${fieldConfig.name}_other`)}
+                                                                            value={watchFields[`${fieldConfig.name}_other`] || ""}
+                                                                        />
+                                                                        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px" }}>
+                                                                            <span>0</span> {/* Label for the start of the slider */}
+                                                                            <input
+                                                                                type="range"
+                                                                                min="0"
+                                                                                max="10"
+                                                                                step="1"
+                                                                                {...register(`${fieldConfig.name}_score`)}
+                                                                                value={watchFields[`${fieldConfig.name}_score`] || 5}
+                                                                            />
+                                                                            <span>10</span> {/* Label for the end of the slider */}
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                            </SelectContainer>
+                                                        ) : fieldConfig.type === "battery" ? (
+                                                            <BatteryCondition value={field.value || 0} onChange={field.onChange} />
+                                                        ) : fieldConfig.type === "checkbox" ? (
+                                                            <CheckboxGroup>
+                                                                {fieldConfig.options?.map((option) => (
+                                                                    <CheckboxLabel key={option}>
+                                                                        <CheckboxInput
+                                                                            type="checkbox"
+                                                                            value={option}
+                                                                            checked={field.value?.includes(option)}
+                                                                            onChange={(e) => {
+                                                                                const value = e.target.value;
+                                                                                const newValue = field.value?.includes(value)
+                                                                                    ? field.value.filter((item) => item !== value)
+                                                                                    : [...(field.value || []), value];
+                                                                                field.onChange(newValue);
+                                                                            }}
+                                                                        />
+                                                                        {option}
+                                                                    </CheckboxLabel>
+                                                                ))}
+                                                            </CheckboxGroup>
+                                                        ) : fieldConfig.type === "phone" ? (
+                                                            <PhoneNumberContainer>
+                                                                <CountryCodeInput
+                                                                    placeholder="+61"
+                                                                    type="text"
+                                                                    maxLength="4"
+                                                                    value={field.value?.countryCode || ""} // Retain country code
+                                                                    onChange={(e) => field.onChange({ ...field.value, countryCode: e.target.value })}
+                                                                    required={fieldConfig.required}
+                                                                />
+                                                                <PhoneNumberInput
+                                                                    placeholder="Phone Number"
+                                                                    type="text"
+                                                                    value={field.value?.phoneNumber || ""} // Retain phone number
+                                                                    onChange={(e) => field.onChange({ ...field.value, phoneNumber: e.target.value })}
+                                                                    required={fieldConfig.required}
+                                                                />
+                                                            </PhoneNumberContainer>
+                                                        ) : fieldConfig.type === "year" ? (
+                                                            <YearSelect value={field.value} onChange={(e) => field.onChange(e.target.value)} />
+                                                        ) : fieldConfig.type === "textarea" ? (
+                                                            <TextArea {...field} />
+                                                        ) : fieldConfig.type === "date" ? (
+                                                            <Input type="date" {...field} required={fieldConfig.required} />
+                                                        ) : fieldConfig.type === "time" ? (
+                                                            <Input type="time" {...field} required={fieldConfig.required} />
+                                                        ) : (
+                                                            <Input type={fieldConfig.type} {...field} required={fieldConfig.required} />
+                                                        )}
+                                                        {errors[fieldConfig.name] && <ErrorMessage>This field is required</ErrorMessage>}
+                                                    </>
                                                 )}
-                                                {errors[fieldConfig.name] && <ErrorMessage>This field is required</ErrorMessage>}
                                             </>
                                         )}
                                     />
